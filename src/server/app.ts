@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { createAssistantTurn } from '../domain/conversationOrchestrator';
 import { gradeQuiz, quizQuestions } from '../domain/quiz';
 import type { ConversationMessage, Lead, ProposedAction, Role, UserProfile } from '../shared/types';
+import type { AssistantTurnOutput } from '../domain/conversationOrchestrator';
 import { config } from './config';
-import { enhanceWithGemini } from './ai/gemini';
 import type { AppStore } from './store/types';
 
 type AuthedRequest = Request & { user: UserProfile };
@@ -74,7 +74,7 @@ function zeroScoreBecauseNoConsent(lead: Lead, segment: Lead['segment']): Pick<L
   };
 }
 
-function publicSignalsWithoutCommercialData(signals: ReturnType<typeof createAssistantTurn>['signals']) {
+function publicSignalsWithoutCommercialData(signals: AssistantTurnOutput['signals']) {
   return {
     ...signals,
     interestTags: [],
@@ -275,7 +275,7 @@ export function createApp(store: AppStore) {
         citations: [],
       });
 
-      const turn = createAssistantTurn({
+      const turn = await createAssistantTurn({
         profile: user,
         lead,
         userText: userMessage.content,
@@ -309,26 +309,15 @@ export function createApp(store: AppStore) {
 
       const proposedAction =
         commercialStorageAllowed && turn.proposedAction ? await store.createProposedAction(turn.proposedAction) : undefined;
-      const enhanced = await enhanceWithGemini({
-        draft: turn.assistantText,
-        citations: turn.citations,
-        conversationSummary: turn.conversationSummary,
-        internalSignals: {
-          objections: turn.signals.objections,
-          contactRequested: turn.signals.contactRequested,
-          educationalIntent: turn.signals.educationalIntent,
-          commercialIntent: turn.signals.commercialIntent,
-        },
-        usedSkills: turn.usedSkills,
-      });
+      const usedGemini = turn.usedSkills.includes('geminiConversationEngine');
       const assistantMessage = await store.addMessage({
         conversationId: conversation.id,
         userId: user.id,
         role: 'assistant',
-        content: enhanced.text,
+        content: turn.assistantText,
         citations: turn.citations,
         metadata: {
-          usedGemini: enhanced.usedGemini,
+          usedGemini,
           consentPrompt: turn.consentPrompt,
           scoreBreakdown: updatedLead.scoreBreakdown,
           segment: updatedLead.segment,

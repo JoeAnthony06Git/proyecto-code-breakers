@@ -1,4 +1,4 @@
-import { answerFromApprovedContent } from './rag';
+import { answerFromApprovedContent, answerFromApprovedContentSemantic } from './rag';
 import { analyzeLeadContext } from './leadScoring';
 import type { ConversationMessage, DiscoveryQuestion, Lead, UserProfile } from '../shared/types';
 
@@ -47,6 +47,10 @@ export function skillRetrieveApprovedKnowledge(nextUserText: string) {
   return answerFromApprovedContent(nextUserText);
 }
 
+export async function skillRetrieveApprovedKnowledgeSemantic(nextUserText: string) {
+  return answerFromApprovedContentSemantic(nextUserText);
+}
+
 export function skillSelectDiscoveryQuestion(input: {
   questions: DiscoveryQuestion[];
   segment: Lead['segment'];
@@ -74,11 +78,11 @@ export function skillSummarizeConversation(input: {
   return `${input.profile.name}: ${userMessages.join(' | ')}. Intereses detectados: ${interests}.${objections}`;
 }
 
-export function skillApplySafetyPolicy(text: string, hasCitations: boolean) {
+export function skillApplySafetyPolicy(text: string, hasCitations: boolean, strict = true) {
   const banned = /(garantiz(a|o)|rentabilidad asegurada|sin riesgo|debes invertir|compra este producto|recomiendo comprar)/i;
   const disclaimer = 'Esto es contenido educativo y no reemplaza asesoria personalizada.';
   let safeText = text.replace(banned, 'no puedo afirmar eso con seguridad');
-  if (!hasCitations && /inversion|financ|riesgo|producto|rentabilidad|jubilacion/i.test(safeText)) {
+  if (strict && !hasCitations && /inversion|financ|riesgo|producto|rentabilidad|jubilacion/i.test(safeText)) {
     safeText =
       'No encontre contenido aprobado suficiente para responder con seguridad. Puedo ayudarte con objetivos, presupuesto, riesgo, diversificacion o derivar la pregunta a revision humana.';
   }

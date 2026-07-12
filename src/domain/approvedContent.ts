@@ -61,6 +61,36 @@ export const approvedContent: ApprovedContentChunk[] = [
     content:
       'En organizaciones, la educacion financiera puede apoyar bienestar, planificacion y toma de decisiones responsables. Un programa para equipos debe considerar numero de participantes, objetivos, nivel inicial, medicion de avance y acompanamiento humano.',
   },
+  {
+    id: 'fa-007',
+    title: 'Que es Futuro Academy',
+    module: 'Introduccion',
+    section: 'Seccion 1',
+    approved: true,
+    tags: ['futuro academy', 'plataforma', 'educacion financiera', 'bienvenida', 'presentacion'],
+    content:
+      'Futuro Academy es una plataforma de educacion financiera que ayuda a personas y empresas a tomar mejores decisiones economicas a traves de conocimiento estructurado, evaluaciones y acompanamiento. Ofrece programas modulares sobre finanzas personales, inversion, ahorro, jubilacion, presupuesto y gestion de riesgos. Tambien cuenta con programas corporativos de bienestar financiero para equipos. Todo el contenido educativo esta aprobado y las acciones comerciales requieren supervision humana.',
+  },
+  {
+    id: 'fa-008',
+    title: 'Servicios que ofrece Futuro Academy',
+    module: 'Introduccion',
+    section: 'Seccion 2',
+    approved: true,
+    tags: ['servicios', 'programas', 'cursos', 'capacitacion', 'asesoria'],
+    content:
+      'Futuro Academy ofrece programas de educacion financiera para individuos y empresas. Para individuos: cursos sobre finanzas personales, inversion, ahorro para jubilacion, presupuesto, manejo de deudas, riesgo y diversificacion. Para empresas: programas de bienestar financiero corporativo, capacitacion en educacion financiera para colaboradores, y acompanamiento en planificacion financiera organizacional. Todos los programas incluyen material educativo aprobado, evaluaciones de conocimiento y la opcion de contacto con especialistas bajo consentimiento.',
+  },
+  {
+    id: 'fa-009',
+    title: 'Como funciona el acompanamiento en Futuro Academy',
+    module: 'Introduccion',
+    section: 'Seccion 3',
+    approved: true,
+    tags: ['funcionamiento', 'proceso', 'onboarding', 'acompanamiento', 'metodologia'],
+    content:
+      'El acompanamiento en Futuro Academy comienza con una conversacion donde el asistente identifica el perfil del usuario, sus intereses y necesidades. El usuario puede acceder a contenido educativo aprobado, realizar quizzes financieros, y recibir orientacion personalizada basada en contenido verificado. Si el usuario autoriza el registro de intereses comerciales, un administrador humano puede revisar su caso y contactarlo. Ninguna accion comercial se ejecuta sin aprobacion humana. El objetivo es educar primero y facilitar el contacto con especialistas solo cuando el usuario lo solicite y autorice.',
+  },
 ];
 
 export const defaultDiscoveryQuestions: DiscoveryQuestion[] = [

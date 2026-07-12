@@ -81,8 +81,8 @@ describe('agent discovery skills', () => {
     updatedAt: new Date().toISOString(),
   };
 
-  it('evita repetir preguntas que ya fueron contestadas', () => {
-    const turn = createAssistantTurn({
+  it('evita repetir preguntas que ya fueron contestadas', async () => {
+    const turn = await createAssistantTurn({
       profile,
       lead,
       userText: 'Es para mi empresa, participarian 40 personas y queremos empezar esta semana.',
@@ -96,8 +96,8 @@ describe('agent discovery skills', () => {
     expect(turn.usedSkills).toContain('skillSelectDiscoveryQuestion');
   });
 
-  it('propone una accion comercial pendiente sin enviarla automaticamente', () => {
-    const turn = createAssistantTurn({
+  it('propone una accion comercial pendiente sin enviarla automaticamente', async () => {
+    const turn = await createAssistantTurn({
       profile,
       lead,
       userText: 'Somos una empresa de 40 personas, tenemos presupuesto y queremos una reunion esta semana.',

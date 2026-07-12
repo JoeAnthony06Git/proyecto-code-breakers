@@ -4,10 +4,12 @@ import {
   skillAnalyzeContext,
   skillApplySafetyPolicy,
   skillRetrieveApprovedKnowledge,
+  skillRetrieveApprovedKnowledgeSemantic,
   skillSelectDiscoveryQuestion,
   skillSummarizeConversation,
 } from './agentSkills';
 import { recommendCommercialAction } from './commercialFollowUp';
+import { generateAssistantResponse, generateConversationSummary } from '../server/ai/gemini';
 import type {
   ConsentStatus,
   ConversationMessage,
@@ -43,9 +45,10 @@ function consentAllowsCommercialUse(status: ConsentStatus) {
   return status === 'GRANTED';
 }
 
-export function createAssistantTurn(input: AssistantTurnInput): AssistantTurnOutput {
+export async function createAssistantTurn(input: AssistantTurnInput): Promise<AssistantTurnOutput> {
   const analysis = skillAnalyzeContext(input.history, input.userText);
-  const rag = skillRetrieveApprovedKnowledge(input.userText);
+  const semanticRag = await skillRetrieveApprovedKnowledgeSemantic(input.userText);
+  const rag = semanticRag.grounded ? semanticRag : skillRetrieveApprovedKnowledge(input.userText);
   const questions = input.discoveryQuestions ?? defaultDiscoveryQuestions;
   const selectedQuestion = skillSelectDiscoveryQuestion({
     questions,
@@ -56,34 +59,78 @@ export function createAssistantTurn(input: AssistantTurnInput): AssistantTurnOut
   });
   const needsConsent = analysis.signals.commercialIntent && input.lead.consentStatus === 'PENDING';
   const commercialAllowed = consentAllowsCommercialUse(input.lead.consentStatus);
-  const conversationSummary = skillSummarizeConversation({ profile: input.profile, history: input.history, nextUserText: input.userText, analysis });
 
-  const parts: string[] = [];
-  if (rag.answer) parts.push(rag.answer);
+  const geminiSummary = await generateConversationSummary({
+    profile: input.profile,
+    history: input.history,
+    userText: input.userText,
+    signals: analysis.signals,
+  });
+  const conversationSummary = geminiSummary || skillSummarizeConversation({
+    profile: input.profile,
+    history: input.history,
+    nextUserText: input.userText,
+    analysis,
+  });
 
-  if (analysis.signals.educationalIntent && !rag.answer) {
-    parts.push('Puedo ayudarte con educacion financiera usando solo contenido aprobado. Dime si quieres revisar objetivos, presupuesto, riesgo, diversificacion o productos financieros.');
-  }
+  const geminiResponse = await generateAssistantResponse({
+    userText: input.userText,
+    history: input.history,
+    profile: input.profile,
+    ragContent: rag.answer || '',
+    ragCitations: rag.citations,
+    signals: {
+      segment: analysis.signals.segment,
+      educationalIntent: analysis.signals.educationalIntent,
+      commercialIntent: analysis.signals.commercialIntent,
+      objections: analysis.signals.objections,
+      contactRequested: analysis.signals.contactRequested,
+      interestTags: analysis.signals.interestTags,
+    },
+    discoveryQuestion: selectedQuestion?.text ?? null,
+    conversationSummary,
+  });
 
-  if (analysis.signals.commercialIntent && !commercialAllowed) {
-    parts.push('Puedo conversar sobre tus necesidades, pero no registrare intereses comerciales hasta que autorices ese registro.');
-  }
+  let assistantText: string;
+  let citations: Citation[];
+  let usedGemini: boolean;
 
-  if (analysis.signals.objections.length > 0) {
-    parts.push(
-      `Entiendo la preocupacion sobre ${analysis.signals.objections.join(', ')}. Puedo aclararla con informacion educativa y, si corresponde, dejar una nota para revision humana.`,
-    );
-  }
+  if (geminiResponse.usedGemini) {
+    assistantText = skillApplySafetyPolicy(geminiResponse.text, rag.citations.length > 0, false);
+    citations = geminiResponse.citations;
+    usedGemini = true;
+  } else {
+    const parts: string[] = [];
+    if (rag.answer) parts.push(rag.answer);
 
-  if (selectedQuestion) parts.push(selectedQuestion.text);
+    if (analysis.signals.educationalIntent && !rag.answer) {
+      parts.push('Puedo ayudarte con educacion financiera usando solo contenido aprobado. Dime si quieres revisar objetivos, presupuesto, riesgo, diversificacion o productos financieros.');
+    }
 
-  if (analysis.signals.contactRequested) {
-    parts.push('Puedo preparar una propuesta de contacto para que un administrador la revise. Nada se envia automaticamente.');
-  }
+    if (analysis.signals.commercialIntent && !commercialAllowed) {
+      parts.push('Puedo conversar sobre tus necesidades, pero no registrare intereses comerciales hasta que autorices ese registro.');
+    }
 
-  if (parts.length === 0) {
-    parts.push(`Hola ${input.profile.name}. Puedo ayudarte a aprender sobre finanzas y, si lo autorizas, registrar intereses para que un especialista revise tu caso.`);
+    if (analysis.signals.objections.length > 0) {
+      parts.push(
+        `Entiendo la preocupacion sobre ${analysis.signals.objections.join(', ')}. Puedo aclararla con informacion educativa y, si corresponde, dejar una nota para revision humana.`,
+      );
+    }
+
     if (selectedQuestion) parts.push(selectedQuestion.text);
+
+    if (analysis.signals.contactRequested) {
+      parts.push('Puedo preparar una propuesta de contacto para que un administrador la revise. Nada se envia automaticamente.');
+    }
+
+    if (parts.length === 0) {
+      parts.push(`Hola ${input.profile.name}. Puedo ayudarte a aprender sobre finanzas y, si lo autorizas, registrar intereses para que un especialista revise tu caso.`);
+      if (selectedQuestion) parts.push(selectedQuestion.text);
+    }
+
+    assistantText = skillApplySafetyPolicy(parts.join('\n\n'), rag.citations.length > 0);
+    citations = rag.citations;
+    usedGemini = false;
   }
 
   const shouldCreateOpportunity =
@@ -100,8 +147,8 @@ export function createAssistantTurn(input: AssistantTurnInput): AssistantTurnOut
     : undefined;
 
   return {
-    assistantText: skillApplySafetyPolicy(parts.join('\n\n'), rag.citations.length > 0),
-    citations: rag.citations,
+    assistantText,
+    citations,
     scoreBreakdown: analysis.breakdown,
     signals: analysis.signals,
     consentPrompt: needsConsent,
@@ -114,6 +161,7 @@ export function createAssistantTurn(input: AssistantTurnInput): AssistantTurnOut
       'skillSelectDiscoveryQuestion',
       'skillSummarizeConversation',
       'skillApplySafetyPolicy',
+      ...(usedGemini ? ['geminiConversationEngine'] : []),
     ],
   };
 }

@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-server
+api/index.js
 .env
 .env.local
 data/*.json

@@ -1,5 +1,5 @@
-import { answerFromApprovedContent, answerFromApprovedContentSemantic } from './rag';
-import { analyzeLeadContext } from './leadScoring';
+import { answerFromApprovedContent, answerFromApprovedContentSemantic } from './rag.js';
+import { analyzeLeadContext } from './leadScoring.js';
 import type { ConversationMessage, DiscoveryQuestion, Lead, UserProfile } from '../shared/types';
 
 function normalize(value: string) {

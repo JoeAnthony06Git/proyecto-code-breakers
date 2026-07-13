@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { approvedContent, defaultDiscoveryQuestions } from '../../domain/approvedContent';
+import { approvedContent, defaultDiscoveryQuestions } from '../../domain/approvedContent.js';
 import type {
   AdminDashboardPayload,
   ApprovedContentChunk,

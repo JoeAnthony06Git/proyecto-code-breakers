@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { config } from '../config';
+import { config } from '../config.js';
 import type { Citation, ConversationMessage, UserProfile } from '../../shared/types';
 
 let genAI: GoogleGenerativeAI | null = null;

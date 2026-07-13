@@ -2,8 +2,17 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build && npm run build:api",
   "outputDirectory": "dist",
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/[...path].ts"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }

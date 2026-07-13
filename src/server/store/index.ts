@@ -1,6 +1,6 @@
-import { config } from '../config';
-import { FileStore } from './fileStore';
-import { SupabaseStore } from './supabaseStore';
+import { config } from '../config.js';
+import { FileStore } from './fileStore.js';
+import { SupabaseStore } from './supabaseStore.js';
 import type { AppStore } from './types';
 
 export function createStore(): AppStore {

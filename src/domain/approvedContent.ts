@@ -1,5 +1,5 @@
 import type { ApprovedContentChunk, DiscoveryQuestion } from '../shared/types';
-import { fictitiousCompanyContent } from './fictitiousCompanyContent';
+import { fictitiousCompanyContent } from './fictitiousCompanyContent.js';
 
 const futuroAcademyContent: ApprovedContentChunk[] = [
   {

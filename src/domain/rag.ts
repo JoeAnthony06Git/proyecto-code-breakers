@@ -1,5 +1,5 @@
-import { approvedContent } from './approvedContent';
-import { findRelevantChunks } from '../server/ai/gemini';
+import { approvedContent } from './approvedContent.js';
+import { findRelevantChunks } from '../server/ai/gemini.js';
 import type { ApprovedContentChunk, Citation } from '../shared/types';
 
 const financeIntentTerms = [

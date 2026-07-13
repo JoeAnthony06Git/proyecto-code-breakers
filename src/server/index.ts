@@ -1,8 +1,8 @@
-import { createApp } from './app';
-import { config } from './config';
-import { createStore } from './store';
-import { precomputeEmbeddings } from './ai/gemini';
-import { approvedContent } from '../domain/approvedContent';
+import { createApp } from './app.js';
+import { config } from './config.js';
+import { createStore } from './store/index.js';
+import { precomputeEmbeddings } from './ai/gemini.js';
+import { approvedContent } from '../domain/approvedContent.js';
 
 const store = createStore();
 await store.init();

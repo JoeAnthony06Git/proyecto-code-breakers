@@ -1,5 +1,5 @@
-import { defaultDiscoveryQuestions } from './approvedContent';
-import { analyzeLeadContext } from './leadScoring';
+import { defaultDiscoveryQuestions } from './approvedContent.js';
+import { analyzeLeadContext } from './leadScoring.js';
 import {
   skillAnalyzeContext,
   skillApplySafetyPolicy,
@@ -7,9 +7,9 @@ import {
   skillRetrieveApprovedKnowledgeSemantic,
   skillSelectDiscoveryQuestion,
   skillSummarizeConversation,
-} from './agentSkills';
-import { recommendCommercialAction } from './commercialFollowUp';
-import { generateAssistantResponse, generateConversationSummary } from '../server/ai/gemini';
+} from './agentSkills.js';
+import { recommendCommercialAction } from './commercialFollowUp.js';
+import { generateAssistantResponse, generateConversationSummary } from '../server/ai/gemini.js';
 import type {
   ConsentStatus,
   ConversationMessage,

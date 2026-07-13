@@ -1,11 +1,11 @@
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { createAssistantTurn } from '../domain/conversationOrchestrator';
-import { gradeQuiz, quizQuestions } from '../domain/quiz';
+import { createAssistantTurn } from '../domain/conversationOrchestrator.js';
+import { gradeQuiz, quizQuestions } from '../domain/quiz.js';
 import type { ApprovedContentChunk, ConversationMessage, Lead, ProposedAction, Role, UserProfile } from '../shared/types';
 import type { AssistantTurnOutput } from '../domain/conversationOrchestrator';
-import { config } from './config';
+import { config } from './config.js';
 import type { AppStore } from './store/types';
 
 type AuthedRequest = Request & { user: UserProfile };

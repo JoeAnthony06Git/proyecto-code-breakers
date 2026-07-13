@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { approvedContent, defaultDiscoveryQuestions } from '../../domain/approvedContent';
+import { approvedContent, defaultDiscoveryQuestions } from '../../domain/approvedContent.js';
 import type {
   AdminDashboardPayload,
   ApprovedContentChunk,

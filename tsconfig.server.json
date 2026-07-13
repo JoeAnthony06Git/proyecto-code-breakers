@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "module": "ES2022",
-    "moduleResolution": "node",
-    "noEmit": false
-  },
-  "include": ["api", "src"]
-}

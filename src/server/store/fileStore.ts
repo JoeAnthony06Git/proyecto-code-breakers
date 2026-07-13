@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import os from 'node:os';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { approvedContent, defaultDiscoveryQuestions } from '../../domain/approvedContent.js';
@@ -45,7 +46,9 @@ interface DemoDb {
   content: ApprovedContentChunk[];
 }
 
-const defaultDataPath = path.resolve(process.cwd(), 'data', 'demo-db.json');
+const defaultDataPath = process.env.VERCEL
+  ? path.join(os.tmpdir(), 'agentic-scale-demo-db.json')
+  : path.resolve(process.cwd(), 'data', 'demo-db.json');
 
 function now() {
   return new Date().toISOString();

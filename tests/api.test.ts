@@ -128,8 +128,125 @@ describe('api authorization and workflow', () => {
     expect(workspace.body.lead.score).toBe(0);
     expect(workspace.body.lead.segment).toBe('UNDETERMINED');
     expect(workspace.body.lead.conversationSummary).toBe('');
+    expect(workspace.body.content).toEqual([]);
     expect(JSON.stringify(workspace.body.messages)).not.toContain('scoreBreakdown');
     expect(JSON.stringify(workspace.body.messages)).not.toContain('B2B');
+  });
+
+  it('redacta fuentes RAG para usuarios normales', async () => {
+    const register = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Fuentes Demo', email: `sources-${Date.now()}@demo.com`, password: 'Password123!' })
+      .expect(201);
+
+    const message = await request(app)
+      .post('/api/conversations/message')
+      .set('Authorization', `Bearer ${register.body.token}`)
+      .send({ message: 'Cuales fueron los ingresos de NubeCondor Tech en 2025?' })
+      .expect(200);
+
+    const workspace = await request(app).get('/api/workspace').set('Authorization', `Bearer ${register.body.token}`).expect(200);
+
+    expect(message.body.assistantMessage.citations).toEqual([]);
+    expect(workspace.body.messages.every((item: { citations: unknown[] }) => item.citations.length === 0)).toBe(true);
+  });
+
+  it('permite enviar solicitudes de cliente y confirma plazo de respuesta', async () => {
+    const register = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Solicitud Demo', email: `request-${Date.now()}@demo.com`, password: 'Password123!' })
+      .expect(201);
+
+    const response = await request(app)
+      .post('/api/client-requests')
+      .set('Authorization', `Bearer ${register.body.token}`)
+      .send({ message: 'Necesito que me contacten para revisar mi caso.' })
+      .expect(201);
+
+    expect(response.body.message).toBe('Hemos recibido tu solicitud. Te responderemos en un plazo máximo de 24 horas.');
+    const userWorkspace = await request(app).get('/api/workspace').set('Authorization', `Bearer ${register.body.token}`).expect(200);
+    expect(userWorkspace.body.clientRequests[0].message).toContain('contacten');
+
+    const adminLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'admin@agentic.scale', password: 'Admin123!' })
+      .expect(200);
+    const dashboard = await request(app)
+      .get('/api/admin/dashboard')
+      .set('Authorization', `Bearer ${adminLogin.body.token}`)
+      .expect(200);
+
+    const storedRequest = dashboard.body.clientRequests.find((item: { userId: string; message: string }) => item.userId === register.body.user.id && item.message.includes('contacten'));
+    expect(storedRequest).toBeTruthy();
+
+    await request(app)
+      .patch(`/api/admin/client-requests/${storedRequest.id}`)
+      .set('Authorization', `Bearer ${adminLogin.body.token}`)
+      .send({ status: 'ANSWERED', response: 'Gracias por escribirnos. Un especialista revisara tu caso hoy.' })
+      .expect(200);
+
+    const updatedDashboard = await request(app)
+      .get('/api/admin/dashboard')
+      .set('Authorization', `Bearer ${adminLogin.body.token}`)
+      .expect(200);
+    const updatedRequest = updatedDashboard.body.clientRequests.find((item: { id: string }) => item.id === storedRequest.id);
+    expect(updatedRequest.status).toBe('ANSWERED');
+    expect(updatedRequest.response).toContain('Gracias por escribirnos');
+
+    const updatedUserWorkspace = await request(app).get('/api/workspace').set('Authorization', `Bearer ${register.body.token}`).expect(200);
+    expect(updatedUserWorkspace.body.clientRequests[0].response).toContain('Gracias por escribirnos');
+  });
+
+  it('limpia la conversacion actual del usuario', async () => {
+    const register = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Limpiar Demo', email: `clear-${Date.now()}@demo.com`, password: 'Password123!' })
+      .expect(201);
+
+    await request(app)
+      .post('/api/conversations/message')
+      .set('Authorization', `Bearer ${register.body.token}`)
+      .send({ message: 'Quiero aprender sobre presupuesto.' })
+      .expect(200);
+
+    const before = await request(app).get('/api/workspace').set('Authorization', `Bearer ${register.body.token}`).expect(200);
+    expect(before.body.messages.length).toBeGreaterThan(0);
+
+    await request(app).delete('/api/conversations/current').set('Authorization', `Bearer ${register.body.token}`).expect(200);
+    const after = await request(app).get('/api/workspace').set('Authorization', `Bearer ${register.body.token}`).expect(200);
+
+    expect(after.body.messages).toHaveLength(0);
+  });
+
+  it('permite al admin eliminar un seguimiento comercial sin borrar el lead', async () => {
+    const register = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Seguimiento Demo', email: `follow-${Date.now()}@demo.com`, password: 'Password123!' })
+      .expect(201);
+
+    const adminLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'admin@agentic.scale', password: 'Admin123!' })
+      .expect(200);
+
+    const dashboard = await request(app)
+      .get('/api/admin/dashboard')
+      .set('Authorization', `Bearer ${adminLogin.body.token}`)
+      .expect(200);
+    const lead = dashboard.body.leads.find((item: { userId: string }) => item.userId === register.body.user.id);
+
+    await request(app)
+      .delete(`/api/admin/follow-ups/${lead.id}`)
+      .set('Authorization', `Bearer ${adminLogin.body.token}`)
+      .expect(200);
+
+    const updatedDashboard = await request(app)
+      .get('/api/admin/dashboard')
+      .set('Authorization', `Bearer ${adminLogin.body.token}`)
+      .expect(200);
+    const updatedLead = updatedDashboard.body.leads.find((item: { id: string }) => item.id === lead.id);
+
+    expect(updatedLead.status).toBe('CLOSED');
   });
 
   it('registra resultado del quiz', async () => {

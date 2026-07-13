@@ -38,8 +38,11 @@ export const api = {
   login(input: { email: string; password: string }) {
     return request<AuthSession>('/api/auth/login', { method: 'POST', body: JSON.stringify(input) });
   },
-  logout() {
-    return request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' });
+  logout(token?: string) {
+    return request<{ ok: boolean }>('/api/auth/logout', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
   },
   requestPasswordReset(email: string) {
     return request<{ ok: boolean; message: string }>('/api/auth/password-reset', { method: 'POST', body: JSON.stringify({ email }) });
@@ -52,6 +55,12 @@ export const api = {
   },
   workspace() {
     return request<WorkspacePayload>('/api/workspace');
+  },
+  createClientRequest(input: { subject?: string; message: string }) {
+    return request<{ request: WorkspacePayload['clientRequests'][number]; message: string }>('/api/client-requests', { method: 'POST', body: JSON.stringify(input) });
+  },
+  clearConversation() {
+    return request<{ ok: boolean }>('/api/conversations/current', { method: 'DELETE' });
   },
   sendMessage(message: string) {
     return request<{
@@ -75,6 +84,12 @@ export const api = {
   },
   reviewAction(id: string, input: { status: 'APPROVED' | 'EDITED' | 'REJECTED'; draft?: string }) {
     return request('/api/admin/actions/' + id + '/review', { method: 'POST', body: JSON.stringify(input) });
+  },
+  deleteFollowUp(leadId: string) {
+    return request('/api/admin/follow-ups/' + leadId, { method: 'DELETE' });
+  },
+  updateClientRequestStatus(id: string, status: 'OPEN' | 'ANSWERED' | 'DISMISSED', response?: string) {
+    return request('/api/admin/client-requests/' + id, { method: 'PATCH', body: JSON.stringify({ status, response }) });
   },
   updateQuestion(id: string, input: { text?: string; active?: boolean; order?: number }) {
     return request('/api/admin/discovery-questions/' + id, { method: 'PATCH', body: JSON.stringify(input) });

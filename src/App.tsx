@@ -5,13 +5,17 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  Download,
   FileText,
   GraduationCap,
   LayoutDashboard,
   LogOut,
+  Mail,
   MessageSquare,
   RefreshCcw,
+  Send,
   ShieldCheck,
+  Trash2,
   UserRound,
   UsersRound,
   X,
@@ -31,7 +35,7 @@ import type {
 
 type Screen = 'landing' | 'auth' | 'workspace';
 type AuthMode = 'login' | 'register';
-type WorkspaceView = 'chat' | 'academy' | 'crm' | 'supervision' | 'content';
+type WorkspaceView = 'chat' | 'academy' | 'crm' | 'requests' | 'supervision' | 'content';
 
 const blankRegister = { name: '', email: '', password: '', confirm: '' };
 const blankLogin = { email: '', password: '' };
@@ -45,6 +49,17 @@ export function App() {
   const [activeView, setActiveView] = useState<WorkspaceView>('chat');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function clearLocalSession(nextScreen: Screen = 'landing') {
+    clearToken();
+    setUser(null);
+    setWorkspace(null);
+    setAdmin(null);
+    setActiveView('chat');
+    setError(null);
+    setBusy(false);
+    setScreen(nextScreen);
+  }
 
   async function loadWorkspace(currentUser = user) {
     const nextWorkspace = await api.workspace();
@@ -65,12 +80,15 @@ export function App() {
         await loadWorkspace(nextUser);
       })
       .catch(() => {
-        clearToken();
-        setScreen('landing');
+        clearLocalSession('landing');
       });
   }, []);
 
   async function handleAuth(session: AuthSession) {
+    setWorkspace(null);
+    setAdmin(null);
+    setActiveView('chat');
+    setError(null);
     setToken(session.token);
     setUser(session.user);
     setScreen('workspace');
@@ -78,17 +96,13 @@ export function App() {
   }
 
   async function logout() {
+    const token = getToken() ?? undefined;
+    clearLocalSession('landing');
     try {
-      await api.logout();
+      await api.logout(token);
     } catch {
       // Local cleanup still protects the browser session if the server token is already expired.
     }
-    clearToken();
-    setUser(null);
-    setWorkspace(null);
-    setAdmin(null);
-    setScreen('landing');
-    setActiveView('chat');
   }
 
   if (screen === 'landing') {
@@ -175,7 +189,6 @@ function Landing({ onLogin, onRegister }: { onLogin: () => void; onRegister: () 
             <span>Asistente</span>
             Buena decision. Primero definamos objetivo, horizonte y liquidez. Respondo solo con material aprobado y puedo
             preparar contacto humano si lo autorizas.
-            <small>Fuente: Modulo 1 · Seccion 2 - Futuro Academy</small>
           </div>
         </section>
       </main>
@@ -372,10 +385,11 @@ function Workspace(props: {
         <Brand dark />
         <nav>
           <NavButton active={props.activeView === 'chat'} icon={<MessageSquare size={18} />} label="Conversacion" onClick={() => props.setActiveView('chat')} />
-          <NavButton active={props.activeView === 'academy'} icon={<GraduationCap size={18} />} label="Academia" onClick={() => props.setActiveView('academy')} />
           {isAdmin ? (
             <>
+              <NavButton active={props.activeView === 'academy'} icon={<GraduationCap size={18} />} label="Academia" onClick={() => props.setActiveView('academy')} />
               <NavButton active={props.activeView === 'crm'} icon={<UsersRound size={18} />} label="CRM" onClick={() => props.setActiveView('crm')} />
+              <NavButton active={props.activeView === 'requests'} icon={<Send size={18} />} label="Solicitudes" onClick={() => props.setActiveView('requests')} />
               <NavButton
                 active={props.activeView === 'supervision'}
                 icon={<ClipboardCheck size={18} />}
@@ -411,12 +425,15 @@ function Workspace(props: {
         {error ? <div className="alert danger">{error}</div> : null}
 
         {props.activeView === 'chat' ? (
-          <ChatWorkspace workspace={props.workspace} onWorkspaceChange={props.onWorkspaceChange} onRefresh={props.onRefresh} />
+          <ChatWorkspace workspace={props.workspace} showSources={isAdmin} onWorkspaceChange={props.onWorkspaceChange} onRefresh={props.onRefresh} />
         ) : null}
-        {props.activeView === 'academy' ? (
+        {props.activeView === 'academy' && isAdmin ? (
           <AcademyWorkspace workspace={props.workspace} onWorkspaceChange={props.onWorkspaceChange} onRefresh={props.onRefresh} />
         ) : null}
-        {props.activeView === 'crm' && isAdmin && props.admin ? <CrmWorkspace dashboard={props.admin} /> : null}
+        {props.activeView === 'crm' && isAdmin && props.admin ? <CrmWorkspace dashboard={props.admin} onAdminChange={props.onAdminChange} /> : null}
+        {props.activeView === 'requests' && isAdmin && props.admin ? (
+          <ClientRequestsWorkspace dashboard={props.admin} onAdminChange={props.onAdminChange} />
+        ) : null}
         {props.activeView === 'supervision' && isAdmin && props.admin ? (
           <SupervisionWorkspace dashboard={props.admin} onAdminChange={props.onAdminChange} />
         ) : null}
@@ -434,10 +451,12 @@ function Workspace(props: {
 
 function ChatWorkspace({
   workspace,
+  showSources,
   onWorkspaceChange,
   onRefresh,
 }: {
   workspace: WorkspacePayload;
+  showSources: boolean;
   onWorkspaceChange: (workspace: WorkspacePayload) => void;
   onRefresh: () => Promise<void>;
 }) {
@@ -474,43 +493,77 @@ function ChatWorkspace({
     await onRefresh();
   }
 
+  async function clearChat() {
+    if (workspace.messages.length === 0) return;
+    const confirmed = window.confirm('Deseas limpiar esta conversacion? Esta accion eliminara los mensajes del chat.');
+    if (!confirmed) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.clearConversation();
+      onWorkspaceChange({ ...workspace, messages: [] });
+      await onRefresh();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'No se pudo limpiar el chat.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="workspace-grid">
-      <section className="panel chat-panel">
-        <PanelTitle icon={<MessageSquare size={18} />} title="Conversacion unificada" />
-        <ConsentPanel lead={workspace.lead} onConsent={updateConsent} />
-        <div className="messages">
-          {workspace.messages.length === 0 ? (
-            <div className="empty-state">
-              <BookOpen size={28} />
-              <p>Empieza con una duda financiera o una necesidad comercial. El agente hara descubrimiento progresivo.</p>
-            </div>
-          ) : (
-            workspace.messages.map((item) => <MessageBubble key={item.id} message={item} />)
-          )}
-        </div>
-        {error ? <div className="alert danger">{error}</div> : null}
-        <form className="composer" onSubmit={send}>
-          <textarea
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            placeholder="Escribe: quiero aprender sobre jubilacion, o buscamos capacitar a un equipo..."
+      <div className="chat-column">
+        <section className="panel chat-panel">
+          <div className="panel-toolbar">
+            <PanelTitle icon={<MessageSquare size={18} />} title="Conversacion unificada" />
+            <button className="button secondary compact-button" disabled={busy || workspace.messages.length === 0} onClick={clearChat}>
+              <Trash2 size={16} />
+              Limpiar chat
+            </button>
+          </div>
+          <ConsentPanel lead={workspace.lead} onConsent={updateConsent} />
+          <div className="messages">
+            {workspace.messages.length === 0 ? (
+              <div className="empty-state">
+                <BookOpen size={28} />
+                <p>Empieza con una duda financiera o una necesidad comercial. El agente hara descubrimiento progresivo.</p>
+              </div>
+            ) : (
+              workspace.messages.map((item) => <MessageBubble key={item.id} message={item} showCitations={showSources} />)
+            )}
+          </div>
+          {error ? <div className="alert danger">{error}</div> : null}
+          <form className="composer" onSubmit={send}>
+            <textarea
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder="Escribe: quiero aprender sobre jubilacion, o buscamos capacitar a un equipo..."
+            />
+            <button className="button primary" disabled={busy}>
+              {busy ? 'Enviando...' : 'Enviar'}
+            </button>
+          </form>
+        </section>
+
+        {!showSources ? (
+          <ClientRequestCard
+            requests={workspace.clientRequests}
+            onCreated={(request) => onWorkspaceChange({ ...workspace, clientRequests: [request, ...workspace.clientRequests] })}
           />
-          <button className="button primary" disabled={busy}>
-            {busy ? 'Enviando...' : 'Enviar'}
-          </button>
-        </form>
-      </section>
+        ) : null}
+      </div>
 
       <aside className="side-stack">
         <LeadCard lead={workspace.lead} userVisible />
-        <SourcesCard messages={workspace.messages} />
+        {!showSources ? (
+          <QuizCard questions={workspace.quizQuestions} results={workspace.quizResults} onWorkspaceChange={onWorkspaceChange} workspace={workspace} onRefresh={onRefresh} />
+        ) : null}
+        {showSources ? <SourcesCard messages={workspace.messages} /> : null}
         <ActionStatusCard actions={workspace.proposedActions} />
       </aside>
     </div>
   );
 }
-
 function AcademyWorkspace({
   workspace,
   onWorkspaceChange,
@@ -543,7 +596,78 @@ function AcademyWorkspace({
   );
 }
 
-function CrmWorkspace({ dashboard }: { dashboard: AdminDashboardPayload }) {
+function ClientRequestCard({
+  requests,
+  onCreated,
+}: {
+  requests: WorkspacePayload['clientRequests'];
+  onCreated: (request: WorkspacePayload['clientRequests'][number]) => void;
+}) {
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!message.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await api.createClientRequest({ message });
+      setMessage('');
+      onCreated(response.request);
+      window.alert(response.message);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'No se pudo enviar la solicitud.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel compact">
+      <PanelTitle icon={<Send size={18} />} title="Enviar solicitud" />
+      <form className="request-form" onSubmit={submit}>
+        <textarea
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          placeholder="Escribe tu solicitud o consulta..."
+          rows={4}
+        />
+        {error ? <div className="alert danger">{error}</div> : null}
+        <button className="button primary full" disabled={busy || message.trim().length < 5}>
+          {busy ? 'Enviando...' : 'Enviar solicitud'}
+        </button>
+      </form>
+      <div className="request-history">
+        <strong>Mis solicitudes</strong>
+        {requests.length === 0 ? (
+          <p>No has enviado solicitudes todavia.</p>
+        ) : (
+          requests.map((request) => (
+            <article className="request-item" key={request.id}>
+              <div>
+                <span className={'status status-' + request.status.toLowerCase()}>{request.status}</span>
+                <small>{new Date(request.createdAt).toLocaleString()}</small>
+              </div>
+              <p>{request.message}</p>
+              {request.response ? (
+                <div className="admin-response">
+                  <strong>Respuesta del equipo</strong>
+                  <p>{request.response}</p>
+                </div>
+              ) : (
+                <small>Pendiente de respuesta.</small>
+              )}
+            </article>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function CrmWorkspace({ dashboard, onAdminChange }: { dashboard: AdminDashboardPayload; onAdminChange: (dashboard: AdminDashboardPayload) => void }) {
   return (
     <div className="admin-stack">
       <div className="metric-grid">
@@ -553,7 +677,7 @@ function CrmWorkspace({ dashboard }: { dashboard: AdminDashboardPayload }) {
         <Metric label="Score promedio" value={dashboard.metrics.averageScore} />
         <Metric label="Consentimientos" value={dashboard.metrics.grantedConsent} />
       </div>
-      <CommercialFollowUpPanel dashboard={dashboard} />
+      <CommercialFollowUpPanel dashboard={dashboard} onAdminChange={onAdminChange} />
       <section className="panel">
         <PanelTitle icon={<LayoutDashboard size={18} />} title="Leads y scoring" />
         <div className="table-wrap">
@@ -664,20 +788,123 @@ function textOrPending(value: string | undefined | null, fallback = 'Pendiente')
   return value && value.trim().length > 0 ? value : fallback;
 }
 
-function CommercialFollowUpPanel({ dashboard }: { dashboard: AdminDashboardPayload }) {
-  const [openLeadId, setOpenLeadId] = useState<string | null>(dashboard.leads[0]?.id ?? null);
+function activeFollowUpLeads(dashboard: AdminDashboardPayload) {
+  return dashboard.leads.filter((lead) => lead.status !== 'CLOSED');
+}
+
+function mailtoHref(email: string | undefined, subject: string, body: string) {
+  if (!email || email === 'sin correo') return '#';
+  return `mailto:${email.trim()}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function csvCell(value: unknown) {
+  const text = String(value ?? '').replace(/\r?\n/g, ' ').replace(/"/g, '""');
+  return `"${text}"`;
+}
+
+function downloadCsv(filename: string, rows: unknown[][]) {
+  const csv = '\ufeff' + rows.map((row) => row.map(csvCell).join(';')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportCommercialFollowUpsCsv(dashboard: AdminDashboardPayload) {
+  const headers = [
+    'Nombre',
+    'Correo',
+    'Necesidad',
+    'Perfil detectado',
+    'Clasificacion interna',
+    'Intereses',
+    'Presupuesto',
+    'Urgencia',
+    'Objeciones',
+    'Etapa del embudo',
+    'Puntuacion',
+    'Interes score',
+    'Presupuesto score',
+    'Encaje score',
+    'Urgencia score',
+    'Prioridad',
+    'Resultado quiz',
+    'Accion recomendada',
+    'Mensaje propuesto',
+  ];
+  const rows = activeFollowUpLeads(dashboard).map((lead) => {
+    const user = dashboard.users.find((item) => item.id === lead.userId);
+    const action = latestActionForLead(dashboard, lead);
+    const quiz = latestQuizForUser(dashboard, lead.userId);
+    return [
+      user?.name ?? 'Usuario sin nombre',
+      user?.email ?? 'sin correo',
+      summarizeDetectedNeed(lead.signals, lead.conversationSummary),
+      detectedProfileLabel(lead.signals),
+      lead.segment,
+      lead.signals.interestTags.length > 0 ? lead.signals.interestTags.join(', ') : 'Sin intereses registrados',
+      lead.signals.budgetText ?? 'No detectado',
+      lead.signals.urgencyText ?? (lead.signals.contactRequested ? 'Solicito contacto' : 'No detectada'),
+      lead.signals.objections.length > 0 ? lead.signals.objections.join(', ') : 'Sin objeciones',
+      lead.status,
+      lead.score,
+      lead.scoreBreakdown.interest,
+      lead.scoreBreakdown.budget,
+      lead.scoreBreakdown.fit,
+      lead.scoreBreakdown.urgency,
+      lead.priority,
+      quiz ? `${quiz.score}/${quiz.total}` : 'Sin quiz',
+      action ? actionTypeLabel(action.type) : lead.consentStatus === 'GRANTED' ? 'Pendiente de nueva senal conversacional' : 'Pendiente de consentimiento',
+      textOrPending(action?.draft, 'Sin mensaje propuesto'),
+    ];
+  });
+  downloadCsv(`seguimiento-comercial-${new Date().toISOString().slice(0, 10)}.csv`, [headers, ...rows]);
+}
+
+function CommercialFollowUpPanel({
+  dashboard,
+  onAdminChange,
+}: {
+  dashboard: AdminDashboardPayload;
+  onAdminChange: (dashboard: AdminDashboardPayload) => void;
+}) {
+  const leads = activeFollowUpLeads(dashboard);
+  const [openLeadId, setOpenLeadId] = useState<string | null>(leads[0]?.id ?? null);
+  const [busyLeadId, setBusyLeadId] = useState<string | null>(null);
+
+  async function deleteFollowUp(lead: Lead) {
+    const confirmed = window.confirm('Eliminar este seguimiento comercial? El lead quedara cerrado y no aparecera en esta lista.');
+    if (!confirmed) return;
+    setBusyLeadId(lead.id);
+    try {
+      await api.deleteFollowUp(lead.id);
+      setOpenLeadId(null);
+      onAdminChange(await api.adminDashboard());
+    } finally {
+      setBusyLeadId(null);
+    }
+  }
 
   return (
     <section className="panel">
-      <PanelTitle icon={<ClipboardCheck size={18} />} title="Seguimiento comercial" />
+      <div className="panel-toolbar">
+        <PanelTitle icon={<ClipboardCheck size={18} />} title="Seguimiento comercial" />
+        <button className="button secondary compact-button" disabled={leads.length === 0} onClick={() => exportCommercialFollowUpsCsv(dashboard)}>
+          <Download size={16} />
+          Exportar CSV
+        </button>
+      </div>
       <div className="follow-up-list">
-        {dashboard.leads.length === 0 ? (
+        {leads.length === 0 ? (
           <div className="empty-state">
             <ClipboardCheck size={28} />
             <p>No hay leads para seguimiento todavia.</p>
           </div>
         ) : (
-          dashboard.leads.map((lead) => {
+          leads.map((lead) => {
             const user = dashboard.users.find((item) => item.id === lead.userId);
             const action = latestActionForLead(dashboard, lead);
             const quiz = latestQuizForUser(dashboard, lead.userId);
@@ -728,11 +955,138 @@ function CommercialFollowUpPanel({ dashboard }: { dashboard: AdminDashboardPaylo
                       <strong>Mensaje propuesto</strong>
                       <p>{textOrPending(action?.draft, 'Sin mensaje propuesto. Se generara cuando exista una senal comercial suficiente y consentimiento.')}</p>
                     </div>
+                    <div className="row-actions">
+                      <a
+                        className="button secondary"
+                        href={mailtoHref(
+                          user?.email,
+                          'Seguimiento de tu solicitud',
+                          textOrPending(action?.draft, `Hola ${user?.name ?? ''}, te escribimos desde Futuro Academy para dar seguimiento a tu solicitud.`),
+                        )}
+                      >
+                        <Mail size={16} />
+                        Enviar correo
+                      </a>
+                      <button className="button danger" disabled={busyLeadId === lead.id} onClick={() => deleteFollowUp(lead)}>
+                        <Trash2 size={16} />
+                        Eliminar seguimiento
+                      </button>
+                    </div>
                   </div>
                 ) : null}
               </article>
             );
           })
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ClientRequestsWorkspace({
+  dashboard,
+  onAdminChange,
+}: {
+  dashboard: AdminDashboardPayload;
+  onAdminChange: (dashboard: AdminDashboardPayload) => void;
+}) {
+  return (
+    <div className="admin-stack">
+      <ClientRequestsPanel dashboard={dashboard} onAdminChange={onAdminChange} />
+    </div>
+  );
+}
+
+function ClientRequestsPanel({
+  dashboard,
+  onAdminChange,
+}: {
+  dashboard: AdminDashboardPayload;
+  onAdminChange: (dashboard: AdminDashboardPayload) => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [responses, setResponses] = useState<Record<string, string>>({});
+  const requests = [...dashboard.clientRequests].sort((a, b) => {
+    const statusOrder = { OPEN: 0, ANSWERED: 1, DISMISSED: 2 };
+    return statusOrder[a.status] - statusOrder[b.status] || b.createdAt.localeCompare(a.createdAt);
+  });
+
+  async function updateStatus(id: string, status: 'OPEN' | 'ANSWERED' | 'DISMISSED', response?: string) {
+    setBusyId(id);
+    try {
+      await api.updateClientRequestStatus(id, status, response);
+      onAdminChange(await api.adminDashboard());
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <PanelTitle icon={<Send size={18} />} title="Solicitudes de clientes" />
+      <div className="content-list">
+        {requests.length === 0 ? (
+          <div className="empty-state">
+            <Send size={28} />
+            <p>No hay solicitudes recibidas.</p>
+          </div>
+        ) : (
+          requests.map((request) => (
+            <article className="content-item" key={request.id}>
+              <div>
+                <strong>{request.userName}</strong>
+                <span>
+                  {request.userEmail} · {request.status}
+                </span>
+              </div>
+              <p>{request.message}</p>
+              <textarea
+                value={responses[request.id] ?? request.response ?? ''}
+                onChange={(event) => setResponses({ ...responses, [request.id]: event.target.value })}
+                placeholder="Escribe la respuesta que vera el usuario en su panel..."
+              />
+              {request.response ? (
+                <div className="admin-response">
+                  <strong>Respuesta enviada</strong>
+                  <p>{request.response}</p>
+                </div>
+              ) : null}
+              <div className="row-actions">
+                <a
+                  className="button secondary"
+                  href={mailtoHref(
+                    request.userEmail,
+                    `Respuesta: ${request.subject}`,
+                    `Hola ${request.userName},\n\nRecibimos tu solicitud: "${request.message}"\n\n`,
+                  )}
+                >
+                  <Mail size={16} />
+                  Responder por correo
+                </a>
+                {request.status !== 'ANSWERED' ? (
+                  <button
+                    className="button secondary"
+                    disabled={busyId === request.id || !(responses[request.id] ?? request.response ?? '').trim()}
+                    onClick={() => updateStatus(request.id, 'ANSWERED', responses[request.id] ?? request.response ?? '')}
+                  >
+                    <Check size={16} />
+                    Enviar respuesta
+                  </button>
+                ) : null}
+                {request.status !== 'DISMISSED' ? (
+                  <button className="button danger" disabled={busyId === request.id} onClick={() => updateStatus(request.id, 'DISMISSED')}>
+                    <X size={16} />
+                    Descartar
+                  </button>
+                ) : null}
+                {request.status !== 'OPEN' ? (
+                  <button className="button ghost" disabled={busyId === request.id} onClick={() => updateStatus(request.id, 'OPEN')}>
+                    Reabrir
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))
         )}
       </div>
     </section>
@@ -983,12 +1337,12 @@ function ConsentPanel({ lead, onConsent }: { lead: Lead; onConsent: (consent: 'G
   );
 }
 
-function MessageBubble({ message }: { message: ConversationMessage }) {
+function MessageBubble({ message, showCitations }: { message: ConversationMessage; showCitations: boolean }) {
   return (
     <article className={'message ' + message.role}>
       <span>{message.role === 'assistant' ? 'Asistente' : 'Usuario'}</span>
       <p>{message.content}</p>
-      {message.citations.length > 0 ? (
+      {showCitations && message.citations.length > 0 ? (
         <div className="citation-list">
           {message.citations.map((citation) => (
             <small key={citation.chunkId}>

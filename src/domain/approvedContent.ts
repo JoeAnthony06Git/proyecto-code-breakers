@@ -1,6 +1,7 @@
 import type { ApprovedContentChunk, DiscoveryQuestion } from '../shared/types';
+import { fictitiousCompanyContent } from './fictitiousCompanyContent';
 
-export const approvedContent: ApprovedContentChunk[] = [
+const futuroAcademyContent: ApprovedContentChunk[] = [
   {
     id: 'fa-001',
     title: 'Objetivos y horizonte temporal',
@@ -91,6 +92,11 @@ export const approvedContent: ApprovedContentChunk[] = [
     content:
       'El acompanamiento en Futuro Academy comienza con una conversacion donde el asistente identifica el perfil del usuario, sus intereses y necesidades. El usuario puede acceder a contenido educativo aprobado, realizar quizzes financieros, y recibir orientacion personalizada basada en contenido verificado. Si el usuario autoriza el registro de intereses comerciales, un administrador humano puede revisar su caso y contactarlo. Ninguna accion comercial se ejecuta sin aprobacion humana. El objetivo es educar primero y facilitar el contacto con especialistas solo cuando el usuario lo solicite y autorice.',
   },
+];
+
+export const approvedContent: ApprovedContentChunk[] = [
+  ...futuroAcademyContent,
+  ...fictitiousCompanyContent,
 ];
 
 export const defaultDiscoveryQuestions: DiscoveryQuestion[] = [

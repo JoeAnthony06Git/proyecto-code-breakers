@@ -102,7 +102,8 @@ function buildConversationPrompt(input: {
   contextLines.push('- No uses emojis, ni introducciones como "Claro" o "Por supuesto".');
   contextLines.push('- Si el usuario pregunta sobre Futuro Academy o sus servicios, responde con la informacion disponible sin inventar datos.');
   contextLines.push('- Si el usuario quiere aprender sobre finanzas, usa el contenido educativo aprobado cuando sea relevante.');
-  contextLines.push('- Si el usuario pregunta sobre temas fuera del ambito financiero o de Futuro Academy (videojuegos, deportes, tecnologia no financiera, etc.), responde amablemente que no puedes ayudarle con ese tema porque tu especialidad es la educacion financiera.');
+  contextLines.push('- Si el usuario pregunta por empresas ficticias, sectores, ingresos, empleados, activos, riesgos u otros datos empresariales, responde solo si aparecen en el contenido aprobado y aclara que son datos simulados.');
+  contextLines.push('- Si el usuario pregunta sobre temas fuera del ambito financiero, Futuro Academy o la base empresarial aprobada, responde amablemente que no puedes ayudarle con ese tema.');
   contextLines.push('- No inventes datos, precios, productos financieros ni promesas de rentabilidad.');
   contextLines.push('- No des asesoria financiera personalizada ni recomiendes productos especificos.');
   contextLines.push('- No menciones puntuaciones, clasificaciones (B2B/B2C), ni datos internos del perfil.');
@@ -110,7 +111,7 @@ function buildConversationPrompt(input: {
 
   if (input.ragContent) {
     contextLines.push('');
-    contextLines.push('CONTENIDO EDUCATIVO APROBADO DISPONIBLE:');
+    contextLines.push('CONTENIDO APROBADO DISPONIBLE:');
     contextLines.push(input.ragContent);
   }
 

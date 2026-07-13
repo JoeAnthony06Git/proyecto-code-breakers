@@ -6,6 +6,7 @@ import type {
   AdminDashboardPayload,
   ApprovedContentChunk,
   AuthSession,
+  ClientRequest,
   Conversation,
   ConversationMessage,
   DiscoveryQuestion,
@@ -38,6 +39,7 @@ interface DemoDb {
   leads: Lead[];
   opportunities: Opportunity[];
   proposedActions: ProposedAction[];
+  clientRequests: ClientRequest[];
   quizResults: QuizResult[];
   discoveryQuestions: DiscoveryQuestion[];
   content: ApprovedContentChunk[];
@@ -147,6 +149,7 @@ export class FileStore implements AppStore {
         leads: [],
         opportunities: [],
         proposedActions: [],
+        clientRequests: [],
         quizResults: [],
         discoveryQuestions: defaultDiscoveryQuestions,
         content: approvedContent,
@@ -170,6 +173,7 @@ export class FileStore implements AppStore {
       }
     }
     this.data.content = this.data.content ?? [];
+    this.data.clientRequests = this.data.clientRequests ?? [];
     for (const chunk of approvedContent) {
       if (!this.data.content.some((item) => item.id === chunk.id)) {
         this.data.content.push(chunk);
@@ -288,6 +292,13 @@ export class FileStore implements AppStore {
     return message;
   }
 
+  async clearConversation(userId: string) {
+    const conversation = await this.getOrCreateConversation(userId);
+    this.data.messages = this.data.messages.filter((message) => message.conversationId !== conversation.id);
+    conversation.updatedAt = now();
+    await this.persist();
+  }
+
   async getOrCreateLead(userId: string) {
     let lead = this.data.leads.find((item) => item.userId === userId);
     if (!lead) {
@@ -320,6 +331,9 @@ export class FileStore implements AppStore {
     const lead = await this.getOrCreateLead(userId);
     const quizResults = this.data.quizResults.filter((result) => result.userId === userId);
     const proposedActions = this.data.proposedActions.filter((action) => action.userId === userId);
+    const clientRequests = this.data.clientRequests
+      .filter((request) => request.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return {
       profile,
       conversation,
@@ -328,7 +342,36 @@ export class FileStore implements AppStore {
       quizResults,
       content: this.data.content,
       proposedActions,
+      clientRequests,
     };
+  }
+
+  async createClientRequest(input: Pick<ClientRequest, 'userId' | 'subject' | 'message'>) {
+    const timestamp = now();
+    const request: ClientRequest = {
+      ...input,
+      id: id('req'),
+      status: 'OPEN',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    this.data.clientRequests.push(request);
+    await this.persist();
+    return request;
+  }
+
+  async updateClientRequest(idValue: string, reviewerId: string, input: { status: ClientRequest['status']; response?: string }) {
+    const request = this.data.clientRequests.find((item) => item.id === idValue);
+    if (!request) throw Object.assign(new Error('Solicitud no encontrada.'), { status: 404 });
+    request.status = input.status;
+    if (input.response !== undefined) {
+      request.response = input.response;
+      request.respondedBy = reviewerId;
+      request.respondedAt = now();
+    }
+    request.updatedAt = now();
+    await this.persist();
+    return request;
   }
 
   async createQuizResult(input: Omit<QuizResult, 'id' | 'createdAt'>) {
@@ -408,6 +451,14 @@ export class FileStore implements AppStore {
           userEmail: user?.email ?? 'sin correo',
         };
       }),
+      clientRequests: this.data.clientRequests.map((request) => {
+        const user = userMap.get(request.userId);
+        return {
+          ...request,
+          userName: user?.name ?? 'Desconocido',
+          userEmail: user?.email ?? 'sin correo',
+        };
+      }),
       opportunities: this.data.opportunities,
       discoveryQuestions: this.data.discoveryQuestions,
       content: this.data.content,
@@ -431,5 +482,11 @@ export class FileStore implements AppStore {
     action.updatedAt = action.reviewedAt;
     await this.persist();
     return action;
+  }
+
+  async deleteFollowUp(leadId: string) {
+    const lead = this.data.leads.find((item) => item.id === leadId);
+    if (!lead) throw Object.assign(new Error('Lead no encontrado.'), { status: 404 });
+    return this.updateLead({ ...lead, status: 'CLOSED' });
   }
 }

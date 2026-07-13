@@ -26,6 +26,7 @@ La aplicacion ya tiene un adaptador Supabase por SDK para:
 - Consentimientos: campo `consent_status` en `leads`
 - Evaluaciones del tutor y quiz: `quiz_results`
 - Seguimientos: `proposed_actions`
+- Solicitudes de clientes: `client_requests`
 - Preguntas configurables: `discovery_questions`
 - Documentos autorizados: `approved_content`
 - Metricas basicas: calculadas desde tablas Supabase en el backend
@@ -118,6 +119,19 @@ Crea estas tablas desde Supabase Dashboard > Table Editor. Usa nombres de column
 - `status`: text
 - `reviewed_by`: uuid, nullable
 - `reviewed_at`: timestamptz, nullable
+- `created_at`: timestamptz
+- `updated_at`: timestamptz
+
+### client_requests
+
+- `id`: text, primary key
+- `user_id`: uuid
+- `subject`: text
+- `message`: text
+- `response`: text, nullable
+- `responded_by`: uuid, nullable
+- `responded_at`: timestamptz, nullable
+- `status`: text
 - `created_at`: timestamptz
 - `updated_at`: timestamptz
 

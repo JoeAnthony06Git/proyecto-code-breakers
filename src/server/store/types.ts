@@ -2,6 +2,7 @@ import type {
   AdminDashboardPayload,
   ApprovedContentChunk,
   AuthSession,
+  ClientRequest,
   Conversation,
   ConversationMessage,
   DiscoveryQuestion,
@@ -24,6 +25,7 @@ export interface AppStore {
   getOrCreateConversation(userId: string): Promise<Conversation>;
   listMessages(conversationId: string): Promise<ConversationMessage[]>;
   addMessage(input: Omit<ConversationMessage, 'id' | 'createdAt'>): Promise<ConversationMessage>;
+  clearConversation(userId: string): Promise<void>;
   getOrCreateLead(userId: string): Promise<Lead>;
   updateLead(lead: Lead): Promise<Lead>;
   updateConsent(userId: string, consentStatus: Lead['consentStatus']): Promise<Lead>;
@@ -35,13 +37,21 @@ export interface AppStore {
     quizResults: QuizResult[];
     content: ApprovedContentChunk[];
     proposedActions: ProposedAction[];
+    clientRequests: ClientRequest[];
   }>;
+  createClientRequest(input: Pick<ClientRequest, 'userId' | 'subject' | 'message'>): Promise<ClientRequest>;
+  updateClientRequest(
+    id: string,
+    reviewerId: string,
+    input: { status: ClientRequest['status']; response?: string },
+  ): Promise<ClientRequest>;
   createQuizResult(input: Omit<QuizResult, 'id' | 'createdAt'>): Promise<QuizResult>;
   createOpportunity(input: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'>): Promise<Opportunity>;
   createProposedAction(input: Omit<ProposedAction, 'id' | 'createdAt' | 'updatedAt'>): Promise<ProposedAction>;
   getDiscoveryQuestions(): Promise<DiscoveryQuestion[]>;
   updateDiscoveryQuestion(id: string, patch: Partial<Pick<DiscoveryQuestion, 'text' | 'active' | 'order'>>): Promise<DiscoveryQuestion>;
   getAdminDashboard(): Promise<AdminDashboardPayload>;
+  deleteFollowUp(leadId: string): Promise<Lead>;
   reviewAction(
     id: string,
     reviewerId: string,

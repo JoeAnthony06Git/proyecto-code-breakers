@@ -164,6 +164,17 @@ describe('rag guardrails', () => {
     ]);
     expect(chunks).toHaveLength(0);
   });
+
+  it('usa la base empresarial ficticia como memoria RAG aprobada', () => {
+    const chunks = retrieveApprovedContent('ingresos de NubeCondor Tech en 2025', 1);
+    const answer = answerFromApprovedContent('Cuales fueron los ingresos de NubeCondor Tech en 2025?');
+
+    expect(chunks[0]?.title).toBe('NubeCóndor Tech S.A.S.');
+    expect(answer.grounded).toBe(true);
+    expect(answer.citations[0]?.title).toBe('NubeCóndor Tech S.A.S.');
+    expect(answer.answer).toContain('21,8 millones');
+    expect(answer.answer).toContain('Datos ficticios y simulados');
+  });
 });
 
 describe('quiz', () => {

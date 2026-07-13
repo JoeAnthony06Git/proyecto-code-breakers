@@ -81,10 +81,11 @@ export function skillSummarizeConversation(input: {
 export function skillApplySafetyPolicy(text: string, hasCitations: boolean, strict = true) {
   const banned = /(garantiz(a|o)|rentabilidad asegurada|sin riesgo|debes invertir|compra este producto|recomiendo comprar)/i;
   const disclaimer = 'Esto es contenido educativo y no reemplaza asesoria personalizada.';
+  const groundedTopicPattern = /inversion|financ|riesgo|producto|rentabilidad|jubilacion|empresa|ingresos|activos|pasivos|patrimonio|utilidad|nomina|empleados|sector/i;
   let safeText = text.replace(banned, 'no puedo afirmar eso con seguridad');
-  if (strict && !hasCitations && /inversion|financ|riesgo|producto|rentabilidad|jubilacion/i.test(safeText)) {
+  if (strict && !hasCitations && groundedTopicPattern.test(safeText)) {
     safeText =
-      'No encontre contenido aprobado suficiente para responder con seguridad. Puedo ayudarte con objetivos, presupuesto, riesgo, diversificacion o derivar la pregunta a revision humana.';
+      'No encontre contenido aprobado suficiente para responder con seguridad. Puedo ayudarte con Futuro Academy, educacion financiera o la base empresarial ficticia cuando exista una fuente aprobada.';
   }
   if (!safeText.includes(disclaimer) && /inversion|financ|riesgo|producto|rentabilidad|jubilacion/i.test(safeText)) {
     safeText = `${safeText}\n\n${disclaimer}`;

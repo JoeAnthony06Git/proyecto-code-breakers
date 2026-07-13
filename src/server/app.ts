@@ -3,7 +3,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { z } from 'zod';
 import { createAssistantTurn } from '../domain/conversationOrchestrator';
 import { gradeQuiz, quizQuestions } from '../domain/quiz';
-import type { ConversationMessage, Lead, ProposedAction, Role, UserProfile } from '../shared/types';
+import type { ApprovedContentChunk, ConversationMessage, Lead, ProposedAction, Role, UserProfile } from '../shared/types';
 import type { AssistantTurnOutput } from '../domain/conversationOrchestrator';
 import { config } from './config';
 import type { AppStore } from './store/types';
@@ -27,6 +27,11 @@ const messageSchema = z.object({
   message: z.string().min(1).max(2500),
 });
 
+const clientRequestSchema = z.object({
+  subject: z.string().max(120).optional(),
+  message: z.string().min(5).max(1200),
+});
+
 const consentSchema = z.object({
   consent: z.enum(['GRANTED', 'REJECTED']),
 });
@@ -44,6 +49,11 @@ const questionPatchSchema = z.object({
   text: z.string().min(10).max(300).optional(),
   active: z.boolean().optional(),
   order: z.number().int().min(1).max(100).optional(),
+});
+
+const clientRequestStatusSchema = z.object({
+  status: z.enum(['OPEN', 'ANSWERED', 'DISMISSED']),
+  response: z.string().max(2000).optional(),
 });
 
 function cleanMessage(message: string) {
@@ -125,7 +135,7 @@ function redactMessageForUser(message: ConversationMessage): ConversationMessage
         consentPrompt: message.metadata.consentPrompt,
       }
     : undefined;
-  return { ...message, metadata };
+  return { ...message, citations: [], metadata };
 }
 
 function redactActionForUser(action: ProposedAction): ProposedAction {
@@ -136,7 +146,7 @@ function redactActionForUser(action: ProposedAction): ProposedAction {
   };
 }
 
-function redactWorkspaceForRole<T extends { lead: Lead; messages: ConversationMessage[]; proposedActions: ProposedAction[] }>(
+function redactWorkspaceForRole<T extends { lead: Lead; messages: ConversationMessage[]; proposedActions: ProposedAction[]; content: ApprovedContentChunk[] }>(
   workspace: T,
   role: Role,
 ): T {
@@ -146,6 +156,7 @@ function redactWorkspaceForRole<T extends { lead: Lead; messages: ConversationMe
     lead: redactLeadForUser(workspace.lead),
     messages: workspace.messages.map(redactMessageForUser),
     proposedActions: workspace.proposedActions.map(redactActionForUser),
+    content: [],
   };
 }
 
@@ -242,6 +253,34 @@ export function createApp(store: AppStore) {
       const user = (req as AuthedRequest).user;
       const workspace = await store.getWorkspace(user.id);
       res.json({ ...redactWorkspaceForRole(workspace, user.role), quizQuestions });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/client-requests', requireAuth, async (req, res, next) => {
+    try {
+      const input = clientRequestSchema.parse(req.body);
+      const user = (req as AuthedRequest).user;
+      const clientRequest = await store.createClientRequest({
+        userId: user.id,
+        subject: cleanMessage(input.subject || 'Solicitud desde plataforma'),
+        message: cleanMessage(input.message),
+      });
+      res.status(201).json({
+        request: clientRequest,
+        message: 'Hemos recibido tu solicitud. Te responderemos en un plazo máximo de 24 horas.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/conversations/current', requireAuth, async (req, res, next) => {
+    try {
+      const user = (req as AuthedRequest).user;
+      await store.clearConversation(user.id);
+      res.json({ ok: true });
     } catch (error) {
       next(error);
     }
@@ -366,6 +405,28 @@ export function createApp(store: AppStore) {
       const input = actionReviewSchema.parse(req.body);
       const action = await store.reviewAction(String(req.params.id), (req as AuthedRequest).user.id, input);
       res.json({ action });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/admin/follow-ups/:leadId', requireAuth, requireAdmin, async (req, res, next) => {
+    try {
+      const lead = await store.deleteFollowUp(String(req.params.leadId));
+      res.json({ lead });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch('/api/admin/client-requests/:id', requireAuth, requireAdmin, async (req, res, next) => {
+    try {
+      const input = clientRequestStatusSchema.parse(req.body);
+      const clientRequest = await store.updateClientRequest(String(req.params.id), (req as AuthedRequest).user.id, {
+        status: input.status,
+        response: input.response ? cleanMessage(input.response) : undefined,
+      });
+      res.json({ request: clientRequest });
     } catch (error) {
       next(error);
     }

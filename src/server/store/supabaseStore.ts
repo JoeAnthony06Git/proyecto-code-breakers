@@ -5,6 +5,7 @@ import type {
   AdminDashboardPayload,
   ApprovedContentChunk,
   AuthSession,
+  ClientRequest,
   Conversation,
   ConversationMessage,
   DiscoveryQuestion,
@@ -217,6 +218,21 @@ function contentFrom(row: any): ApprovedContentChunk {
   };
 }
 
+function clientRequestFrom(row: any): ClientRequest {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    subject: row.subject,
+    message: row.message,
+    response: row.response ?? undefined,
+    respondedBy: row.responded_by ?? undefined,
+    respondedAt: row.responded_at ?? undefined,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export class SupabaseStore implements AppStore {
   private service: SupabaseClient;
   private authClient: SupabaseClient;
@@ -362,6 +378,15 @@ export class SupabaseStore implements AppStore {
     return messageFrom(data);
   }
 
+  async clearConversation(userId: string) {
+    const conversation = await this.getOrCreateConversation(userId);
+    const timestamp = now();
+    const { error } = await this.service.from('conversation_messages').delete().eq('conversation_id', conversation.id);
+    if (error) throw Object.assign(new Error(error.message), { status: 500 });
+    const { error: updateError } = await this.service.from('conversations').update({ updated_at: timestamp }).eq('id', conversation.id);
+    if (updateError) throw Object.assign(new Error(updateError.message), { status: 500 });
+  }
+
   async getOrCreateLead(userId: string) {
     const { data } = await this.service.from('leads').select('*').eq('user_id', userId).maybeSingle();
     if (data) return leadFrom(data);
@@ -392,6 +417,7 @@ export class SupabaseStore implements AppStore {
     const { data: quizRows } = await this.service.from('quiz_results').select('*').eq('user_id', userId).order('created_at', { ascending: false });
     const { data: contentRows } = await this.service.from('approved_content').select('*').eq('approved', true);
     const { data: actionRows } = await this.service.from('proposed_actions').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+    const { data: requestRows } = await this.service.from('client_requests').select('*').eq('user_id', userId).order('created_at', { ascending: false });
     return {
       profile,
       conversation,
@@ -400,7 +426,47 @@ export class SupabaseStore implements AppStore {
       quizResults: (quizRows ?? []).map(quizFrom),
       content: (contentRows ?? []).map(contentFrom),
       proposedActions: (actionRows ?? []).map(actionFrom),
+      clientRequests: (requestRows ?? []).map(clientRequestFrom),
     };
+  }
+
+  async createClientRequest(input: Pick<ClientRequest, 'userId' | 'subject' | 'message'>) {
+    const timestamp = now();
+    const row = {
+      id: id('req'),
+      user_id: input.userId,
+      subject: input.subject,
+      message: input.message,
+      status: 'OPEN',
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    const { data, error } = await this.service.from('client_requests').insert(row).select('*').single();
+    if (error) throw Object.assign(new Error(error.message), { status: 500 });
+    return clientRequestFrom(data);
+  }
+
+  async updateClientRequest(idValue: string, reviewerId: string, input: { status: ClientRequest['status']; response?: string }) {
+    const timestamp = now();
+    const patch = {
+      status: input.status,
+      updated_at: timestamp,
+      ...(input.response !== undefined
+        ? {
+            response: input.response,
+            responded_by: reviewerId,
+            responded_at: timestamp,
+          }
+        : {}),
+    };
+    const { data, error } = await this.service
+      .from('client_requests')
+      .update(patch)
+      .eq('id', idValue)
+      .select('*')
+      .single();
+    if (error) throw Object.assign(new Error(error.message), { status: 500 });
+    return clientRequestFrom(data);
   }
 
   async createQuizResult(input: Omit<QuizResult, 'id' | 'createdAt'>) {
@@ -482,6 +548,7 @@ export class SupabaseStore implements AppStore {
       { data: quizRows },
       { data: actionRows },
       { data: opportunityRows },
+      { data: requestRows },
       { data: questionRows },
       { data: contentRows },
     ] = await Promise.all([
@@ -492,6 +559,7 @@ export class SupabaseStore implements AppStore {
       this.service.from('quiz_results').select('*').order('created_at', { ascending: false }),
       this.service.from('proposed_actions').select('*').order('created_at', { ascending: false }),
       this.service.from('opportunities').select('*'),
+      this.service.from('client_requests').select('*').order('created_at', { ascending: false }),
       this.service.from('discovery_questions').select('*'),
       this.service.from('approved_content').select('*'),
     ]);
@@ -525,6 +593,11 @@ export class SupabaseStore implements AppStore {
         return { ...action, userName: user?.name ?? 'Desconocido', userEmail: user?.email ?? 'sin correo' };
       }),
       opportunities: (opportunityRows ?? []).map(opportunityFrom),
+      clientRequests: (requestRows ?? []).map((row: any) => {
+        const request = clientRequestFrom(row);
+        const user = userMap.get(request.userId);
+        return { ...request, userName: user?.name ?? 'Desconocido', userEmail: user?.email ?? 'sin correo' };
+      }),
       discoveryQuestions: (questionRows ?? []).map(questionFrom),
       content: (contentRows ?? []).map(contentFrom),
       metrics: {
@@ -549,5 +622,17 @@ export class SupabaseStore implements AppStore {
     const { data, error } = await this.service.from('proposed_actions').update(patch).eq('id', idValue).select('*').single();
     if (error) throw Object.assign(new Error(error.message), { status: 500 });
     return actionFrom(data);
+  }
+
+  async deleteFollowUp(leadId: string) {
+    const timestamp = now();
+    const { data, error } = await this.service
+      .from('leads')
+      .update({ status: 'CLOSED', updated_at: timestamp })
+      .eq('id', leadId)
+      .select('*')
+      .single();
+    if (error) throw Object.assign(new Error(error.message), { status: 500 });
+    return leadFrom(data);
   }
 }

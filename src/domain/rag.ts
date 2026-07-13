@@ -19,6 +19,41 @@ const financeIntentTerms = [
   'objetivo',
   'horizonte',
   'empresa',
+  'empresarial',
+  'ficticia',
+  'simulado',
+  'ecuador',
+  'sector',
+  'ingresos',
+  'ventas',
+  'activos',
+  'pasivos',
+  'patrimonio',
+  'utilidad',
+  'nomina',
+  'empleados',
+  'trabajadores',
+  'contratos',
+  'riesgos',
+  'operaciones',
+  'logistica',
+  'agroindustria',
+  'alimentos',
+  'tecnologia',
+  'construccion',
+  'infraestructura',
+  'retail',
+  'supermercados',
+  'sierraverde',
+  'pacifico cacao',
+  'andina hogar',
+  'costacentro',
+  'nubecondor',
+  'dataparamo',
+  'horizonte vial',
+  'urbanica',
+  'rutapacifico',
+  'andescargo',
   'equipo',
   'capacitacion',
   'futuro',
@@ -33,6 +68,37 @@ const financeIntentTerms = [
   'especialista',
 ];
 
+const stopWords = new Set([
+  'como',
+  'cual',
+  'cuales',
+  'cuanto',
+  'cuantos',
+  'para',
+  'por',
+  'con',
+  'los',
+  'las',
+  'una',
+  'uno',
+  'unos',
+  'unas',
+  'del',
+  'que',
+  'fue',
+  'son',
+  'sus',
+  'mas',
+  'mis',
+  'tus',
+  'tiene',
+  'tuvo',
+  'sobre',
+  'dame',
+  'info',
+  'informacion',
+]);
+
 function normalize(value: string) {
   return value
     .toLowerCase()
@@ -43,7 +109,7 @@ function normalize(value: string) {
 function tokenize(value: string) {
   return normalize(value)
     .split(/[^a-z0-9]+/)
-    .filter((token) => token.length > 2);
+    .filter((token) => token.length > 2 && !stopWords.has(token));
 }
 
 export function hasFinancialIntent(text: string) {
@@ -53,14 +119,17 @@ export function hasFinancialIntent(text: string) {
 
 export function retrieveApprovedContent(query: string, limit = 3, chunks: ApprovedContentChunk[] = approvedContent) {
   const tokens = new Set(tokenize(query));
-  return chunks
+  const scored = chunks
     .filter((chunk) => chunk.approved)
     .map((chunk) => {
       const haystack = tokenize(`${chunk.title} ${chunk.module} ${chunk.section} ${chunk.tags.join(' ')} ${chunk.content}`);
+      const titleScore = tokenize(chunk.title).reduce((total, token) => total + (tokens.has(token) ? 1 : 0), 0);
       const score = haystack.reduce((total, token) => total + (tokens.has(token) ? 1 : 0), 0);
-      return { chunk, score };
+      return { chunk, score, titleScore };
     })
-    .filter((item) => item.score > 0)
+    .filter((item) => item.score > 0);
+  const titleMatches = scored.filter((item) => item.titleScore > 0);
+  return (titleMatches.length > 0 ? titleMatches : scored)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((item) => item.chunk);
@@ -97,6 +166,34 @@ export function citationsFromChunks(chunks: ApprovedContentChunk[]): Citation[] 
   }));
 }
 
+function excerptFromChunk(query: string, chunk: ApprovedContentChunk) {
+  const queryTokens = new Set(tokenize(query));
+  const titleTokens = new Set(tokenize(chunk.title));
+  const lowValueTokens = new Set(['cual', 'cuales', 'cuanto', 'cuantos', 'dame', 'datos', 'info', 'informacion', 'sobre', 'tuvo', 'tiene']);
+  const focusTokens = [...queryTokens].filter((token) => !titleTokens.has(token) && !lowValueTokens.has(token));
+  const tokensToScore = focusTokens.length > 0 ? new Set(focusTokens) : queryTokens;
+
+  const paragraphs = chunk.content
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0 && !normalize(paragraph).startsWith('criterios comunes'));
+
+  const scored = paragraphs.map((paragraph, index) => {
+    const score = tokenize(paragraph).reduce((total, token) => total + (tokensToScore.has(token) ? 1 : 0), 0);
+    return { paragraph, score, index };
+  });
+  const best = scored
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index)[0]?.paragraph;
+  const fallback = paragraphs.find((paragraph) => !normalize(paragraph).startsWith('base de conocimiento ficticia')) ?? paragraphs[0] ?? chunk.content;
+  const excerpt = best ?? fallback;
+  const compact = excerpt.length > 520 ? `${excerpt.slice(0, 517).trimEnd()}...` : excerpt;
+  const fictionalNote = chunk.module.includes('Base empresarial ficticia') && !normalize(compact).includes('fictici')
+    ? ' Datos ficticios y simulados; no representan empresas reales.'
+    : '';
+  return `- ${compact}${fictionalNote}`;
+}
+
 export function answerFromApprovedContent(query: string, chunks: ApprovedContentChunk[] = approvedContent) {
   const retrieved = retrieveApprovedContent(query, 2, chunks);
   if (!hasFinancialIntent(query)) {
@@ -117,15 +214,15 @@ export function answerFromApprovedContent(query: string, chunks: ApprovedContent
   }
 
   const asksForRecommendation = normalize(query).match(/(recomienda|debo comprar|en que invierto|que producto|me conviene)/);
+  const hasFictitiousBusinessContent = retrieved.some((chunk) => chunk.module.includes('Base empresarial ficticia'));
   const sourceSummary = retrieved
-    .map((chunk) => {
-      const firstSentence = chunk.content.split('. ')[0].trim();
-      return `- ${firstSentence}.`;
-    })
+    .map((chunk) => excerptFromChunk(query, chunk))
     .join('\n');
 
   const safetyLine = asksForRecommendation
     ? 'No puedo recomendar un producto especifico ni reemplazar asesoria personalizada. Si quieres, un especialista puede revisar tu caso con consentimiento previo.'
+    : hasFictitiousBusinessContent
+      ? 'Estos datos son ficticios y simulados para la memoria RAG; no representan empresas reales.'
     : 'Esto es contenido educativo y no reemplaza asesoria personalizada.';
 
   return {

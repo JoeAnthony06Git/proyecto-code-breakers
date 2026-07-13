@@ -7,6 +7,7 @@ export type MessageRole = 'user' | 'assistant' | 'system';
 export type ActionStatus = 'PENDING' | 'APPROVED' | 'EDITED' | 'REJECTED';
 export type OpportunityStatus = 'OPEN' | 'WON' | 'LOST' | 'ON_HOLD';
 export type ProfileStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+export type ClientRequestStatus = 'OPEN' | 'ANSWERED' | 'DISMISSED';
 
 export interface Citation {
   chunkId: string;
@@ -134,6 +135,19 @@ export interface ApprovedContentChunk {
   approved: boolean;
 }
 
+export interface ClientRequest {
+  id: string;
+  userId: string;
+  subject: string;
+  message: string;
+  response?: string;
+  respondedBy?: string;
+  respondedAt?: string;
+  status: ClientRequestStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface QuizQuestion {
   id: string;
   question: string;
@@ -169,6 +183,7 @@ export interface WorkspacePayload {
   quizResults: QuizResult[];
   content: ApprovedContentChunk[];
   proposedActions: ProposedAction[];
+  clientRequests: ClientRequest[];
 }
 
 export interface AdminDashboardPayload {
@@ -178,6 +193,7 @@ export interface AdminDashboardPayload {
   quizResults: Array<QuizResult & { userName: string; userEmail: string }>;
   proposedActions: Array<ProposedAction & { userName: string; userEmail: string }>;
   opportunities: Opportunity[];
+  clientRequests: Array<ClientRequest & { userName: string; userEmail: string }>;
   discoveryQuestions: DiscoveryQuestion[];
   content: ApprovedContentChunk[];
   metrics: {
